@@ -93,3 +93,7 @@ class UserMessages:
     @staticmethod
     def get_unknown_command() -> str:
         return '❓ Команда не распознана. \n\nПожалуйста, пользуйтесь клавиатурой:'
+
+    @staticmethod
+    def get_add_channels_first() -> str:
+        return 'Сначала создайте вашу первую продажу!'

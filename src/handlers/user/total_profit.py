@@ -4,10 +4,15 @@ from aiogram.types import CallbackQuery, Message
 from src.database import channels, sales
 from src.database.users import get_user_or_none
 from src.keyboards.user import UserKeyboards
+from src.messages.user import UserMessages
 from src.misc.callbacks_data import NavigationCallback, ChannelCallback
 
 
 async def handle_total_profit_button_message(message: Message):
+    if not channels.get_user_channels(user=message.from_user.id):
+        await message.answer(UserMessages.get_add_channels_first())
+        return
+
     user = get_user_or_none(telegram_id=message.from_user.id)
     user_channels = channels.get_user_channels(user=user)
 

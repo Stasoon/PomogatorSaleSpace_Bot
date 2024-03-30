@@ -40,6 +40,10 @@ def __get_message_data(user_id: int) -> dict:
 
 
 async def handle_sales_calendar_button_message(message: Message):
+    if not channels.get_user_channels(user=message.from_user.id):
+        await message.answer(UserMessages.get_add_channels_first())
+        return
+
     await message.answer(**__get_message_data(user_id=message.from_user.id))
 
 
