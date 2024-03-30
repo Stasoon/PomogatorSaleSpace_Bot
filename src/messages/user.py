@@ -18,6 +18,10 @@ class UserMessages:
         return names[month_num]
 
     @staticmethod
+    def get_welcome_photo() -> str:
+        return 'https://telegra.ph/file/d4204af9476630c8da03e.png'
+
+    @staticmethod
     def get_welcome(user_name: str) -> str:
         return (
             f'🤝 <b>Привет!</b> Я космический помощник учета проданных рекламных мест. \n\n'

@@ -17,8 +17,9 @@ async def handle_start_command(message: Message, state: FSMContext):
     user = message.from_user
     create_user_if_not_exist(telegram_id=user.id, firstname=user.first_name, username=user.username)
 
-    await message.answer(
-        text=UserMessages.get_welcome(user_name=user.first_name),
+    await message.answer_photo(
+        photo=UserMessages.get_welcome_photo(),
+        caption=UserMessages.get_welcome(user_name=user.first_name),
         reply_markup=UserKeyboards.get_main_menu()
     )
 
