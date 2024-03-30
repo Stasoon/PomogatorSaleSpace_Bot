@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Время публикации</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--tg-theme-secondary-bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px; /* Опционально: ограничиваем максимальную ширину контейнера */
+            height: auto;
+            padding: 20px;
+            background-color: var(--tg-theme-bg-color);
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative; /* Для позиционирования div.error */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            color: var(--tg-theme-text-color);
+            text-align: center;
+        }
+
+        .input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        input[type="number"] {
+            width: 6em;
+            height: 40px;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            text-align: center;
+            appearance: textfield; /* Добавлено для отображения стрелочек на мобильных устройствах */
+        }
+
+        /* Увеличение размера стрелок в инпутах */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        span {
+            margin: 0 10px;
+            font-size: 20px;
+            color: #666;
+        }
+
+        button {
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        button img {
+            width: 20px; /* Установите нужный размер для изображений стрелок */
+            height: 20px;
+        }
+
+        button:hover {
+            opacity: 0.7; /* Измените настройки при наведении, если нужно */
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .error {
+            padding-top: 25px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Введите время публикации</h1>
+        <div class="input-container">
+            <div class="arrow-up">
+                <button id="hours-up"><img src="arrow_up.svg" alt="Up"></button>
+                <button id="minutes-up"><img src="arrow_up.svg" alt="Up"></button>
+            </div>
+            <input type="number" id="hours" placeholder="Часы">
+            <span>:</span>
+            <input type="number" id="minutes" placeholder="Минуты">
+            <div class="arrow-down">
+                <button id="hours-down"><img src="arrow_down.svg" alt="Down"></button>
+                <button id="minutes-down"><img src="arrow_down.svg" alt="Down"></button>
+            </div>
+        </div>
+
+        <div class="error" id="error-message"></div>
+        <button id="submit">Отправить</button>
+    </div>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let hoursInput = document.getElementById("hours");
+        let minutesInput = document.getElementById("minutes");
+        let errorMessage = document.getElementById("error-message");
+
+        hoursInput.addEventListener("input", updateTime);
+        minutesInput.addEventListener("input", updateTime);
+
+        let hoursUpButton = document.getElementById("hoursUp");
+        let hoursDownButton = document.getElementById("hoursDown");
+
+        hoursUpButton.addEventListener("click", () => {
+            let hours = parseInt(hoursInput.value) || 0;
+            hours = (hours + 1) % 24;
+            hoursInput.value = hours.toString().padStart(2, '0');
+        });
+
+        hoursDownButton.addEventListener("click", () => {
+            let hours = parseInt(hoursInput.value) || 0;
+            hours = (hours - 1 + 24) % 24;
+            hoursInput.value = hours.toString().padStart(2, '0');
+        });
+
+        function updateTime() {
+            errorMessage.textContent = "";
+
+            let hours = parseInt(hoursInput.value) || 0;
+            let minutes = parseInt(minutesInput.value) || 0;
+
+            // Если часы выходят за диапазон, переходят к следующему/предыдущему дню
+            if (hours < 0) {
+                hours = 23;
+            } else if (hours > 23) {
+                hours = 0;
+            }
+
+            // Если минуты выходят за диапазон, переходят к следующему/предыдущему часу
+            if (minutes < 0) {
+                minutes = 59;
+                if (hours === 0) {
+                    hours = 23;
+                } else {
+                    hours--;
+                }
+            } else if (minutes > 59) {
+                minutes = 0;
+                if (hours === 23) {
+                    hours = 0;
+                } else {
+                    hours++;
+                }
+            }
+
+            // Обновляем значения в инпутах
+            hoursInput.value = hours.toString().padStart(2, '0');
+            minutesInput.value = minutes.toString().padStart(2, '0');
+        }
+        
+        let submitButton = document.getElementById("submit");
+        submitButton.addEventListener("click", () => {
+            // Проверяем, что введенные значения соответствуют шаблону времени
+            if (!hoursInput.value || !minutesInput.value) {
+                errorMessage.textContent = "Пожалуйста, введите время публикации";
+                return;
+            }
+
+            let hours = parseInt(hoursInput.value) || 0;
+            let minutes = parseInt(minutesInput.value) || 0;
+
+            let data = {
+                hours: hours,
+                minutes: minutes
+            }
+            tg.sendData(JSON.stringify(data));
+            tg.close();
+
+            // Очищаем сообщение об ошибке
+            errorMessage.textContent = "";
+        });
+    </script>
+</body>
+</html>

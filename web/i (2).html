@@ -1,0 +1,24 @@
+<style>
+  input {
+  text-align:center;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+</style>
+<div>
+  <button type="button" onclick="this.parentNode.querySelector('[type=number]').stepDown();">
+    -
+  </button>
+
+  <input type="number" name="number" min="0" max="100" value="0">
+
+  <button type="button" onclick="this.parentNode.querySelector('[type=number]').stepUp();">
+    +
+  </button>
+</div>
