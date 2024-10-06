@@ -73,7 +73,22 @@ class Sale(_BaseModel):
     payment_status = CharField(max_length=50)
 
     publication_format = CharField(max_length=50)
-    timestamp = DateTimeField(default=datetime.utcnow)
+    timestamp = DateTimeField(default=datetime.now)
+
+    def get_date_str(self) -> str:
+        return self.timestamp.strftime("%d.%m.%Y")
+
+    def get_time_str(self) -> str:
+        return self.timestamp.strftime("%H:%M")
+
+
+class SalePaymentsReminder(_BaseModel):
+    class Meta:
+        db_table = 'sale_payments_reminders'
+
+    id = AutoField()
+    sale = ForeignKeyField(Sale)
+    reminder_time = DateTimeField()
 
 
 class Admin(_BaseModel):

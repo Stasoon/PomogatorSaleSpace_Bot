@@ -25,6 +25,8 @@ days_short_names = (
     'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Cб', 'Вс'
 )
 
+weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
 
 class UserKeyboards:
 
@@ -222,13 +224,24 @@ class UserKeyboards:
         return builder.as_markup(input_field_placeholder='Выберите статус оплаты:', resize_keyboard=True)
 
     @staticmethod
+    def get_open_sale(sale: Sale) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        month_str = f"{months_words[sale.timestamp.month].lower()[:3]}."
+        time_str = sale.get_time_str()
+        weekday_str = weekdays[sale.timestamp.weekday()]
+
+        text = f'{weekday_str} {sale.timestamp.day} {month_str} {time_str} → {sale.buyer}'
+        builder.button(text=text, callback_data=SaleCallback(sale_id=sale.id))
+        return builder.as_markup()
+
+    @staticmethod
     def get_day_sales(sales: list[Sale]) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
         for sale in sales:
             month_str = f"{months_words[sale.timestamp.month].lower()[:3]}."
-            time_str = sale.timestamp.strftime('%H:%M')
+            time_str = sale.get_time_str()
             weekday_str = weekdays[sale.timestamp.weekday()]
 
             text = f'{weekday_str} {sale.timestamp.day} {month_str} {time_str} → {sale.buyer}'

@@ -90,6 +90,7 @@ def get_purchases_sum_for_month(channel: Channel, year: int, month: int) -> floa
 
 
 def get_total_manager_sum(channel: Channel) -> float:
+    """ Returns the amount earned by the manager for all time """
     result = (
         Sale
         .select(fn.SUM(Sale.publication_cost * Sale.manager_percent / 100))
@@ -100,6 +101,7 @@ def get_total_manager_sum(channel: Channel) -> float:
 
 
 def get_manager_sum_for_month(channel: Channel, year: int, month: int) -> float:
+    """ Returns the amount earned by the manager for the month """
     first_date = date(year=year, month=month, day=1)
     end_date = date(year=year, month=month, day=calendar.monthrange(year=year, month=month)[1])
 
@@ -121,6 +123,7 @@ def get_sales_count_in_channel(channel: Channel) -> int:
 
 
 def get_sales_in_channel(channel: Channel):
+    """ Returns sales for requested channel """
     return Sale.select().where(Sale.channel == channel)
 
 

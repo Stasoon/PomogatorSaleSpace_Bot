@@ -7,7 +7,8 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
-from src.database.models import Sale
+from src.database.models import Sale, User, Channel
+from src.database.sale_payments_remindres import create_sale_payment_reminder
 from src.keyboards.user import UserKeyboards
 from src.messages.user import UserMessages
 from src.database.users import get_user_or_none
@@ -173,66 +174,16 @@ async def handle_publication_cost_message(message: Message, state: FSMContext):
     await state.set_state(PurchaseAddingStates.enter_manager_percent)
 
 
-async def __finish_creation(user_id: int, bot: Bot, created_sale: Sale):
-    date_str = created_sale.timestamp.strftime("%d.%m.%Y")
-    time_str = created_sale.timestamp.strftime("%H:%M")
-    manager_profit = created_sale.publication_cost * (created_sale.manager_percent / 100)
-
-    await bot.send_message(
-        chat_id=user_id,
-        text=f"<b>📄 Отчет TeleУчетка</b> \n\n"
-        f"Запланировано рекламное место на {date_str} {time_str} \n"
-        f"Стоимость рекламного места: {created_sale.publication_cost}₽ \n\n"
-        f"<tg-spoiler>Процент менеджеру: {created_sale.manager_percent}% <b>({manager_profit:.2f}₽)</b></tg-spoiler>",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    msg = await bot.send_animation(
-        chat_id=user_id,
-        animation=UserMessages.get_loading_animation(), caption='Загрузка таблицы...'
-    )
-
-    # Занесение данных в таблицу
-    table_name = __get_table_name(channel_name=created_sale.channel.title)
-
-    if not created_sale.channel.table_id:
-        table_id = await GoogleSheetsAPI.create_table(table_name=table_name, title_data=get_table_title())
-        created_sale.channel.table_id = table_id
-        created_sale.channel.save()
-
-    data = [
-        date_str, time_str, created_sale.buyer, created_sale.publication_cost,
-        created_sale.manager_percent, created_sale.publication_format,
-        created_sale.payment_status
-    ]
-    record_number = sales.get_sales_count_in_channel(channel=created_sale.channel)
-    table_url = await GoogleSheetsAPI.insert_row_data(
-        table_id=created_sale.channel.table_id, data=data, position=record_number
-    )
-
-    month_profit = sales.get_purchases_sum_for_month(
-        year=created_sale.timestamp.year, month=created_sale.timestamp.month, channel=created_sale.channel
-    )
-    manager_month_profit = sales.get_manager_sum_for_month(
-        year=created_sale.timestamp.year, month=created_sale.timestamp.month, channel=created_sale.channel
-    )
-    text = (
-        f'<b>Общий итог продаж за {UserMessages.get_month_name(month_num=created_sale.timestamp.month)}</b> \n\n'
-        f'Доход: {month_profit:.2f} ₽ \n'
-        f'Доход менеджера за месяц: {manager_month_profit:.2f} ₽'
-    )
-    await msg.delete()
-    await bot.send_message(chat_id=user_id, text=text, reply_markup=UserKeyboards.get_table(table_url=table_url))
-    await bot.send_message(chat_id=user_id, text=UserMessages.get_main_menu(), reply_markup=UserKeyboards.get_main_menu())
-
-
 async def handle_manager_percent_message(message: Message, state: FSMContext):
     text = message.text.replace("%", "")
 
     if text.isdigit():
         manager_percent = int(message.text)
     else:
-        try: manager_percent = round(float(text), 2)
-        except ValueError: manager_percent = None
+        try:
+            manager_percent = round(float(text), 2)
+        except ValueError:
+            manager_percent = None
 
     if manager_percent is None:
         await message.answer("Это не число! Введите процент менеджера:")
@@ -259,30 +210,107 @@ async def handle_payment_status(message: Message, state: FSMContext):
     data = await state.get_data()
     await state.clear()
 
-    # Вывод результатов
-    publication_cost = data.get("publication_cost")
-
+    # Saving to DB
     user = get_user_or_none(telegram_id=message.from_user.id)
     channel = channels.get_channel_by_id(channel_id=data.get("channel_id"))
-    timestamp = datetime.datetime.combine(data.get("date"), data.get("time"))
-    new_purchase = sales.create_sale(
-        user=user,
-        buyer=data.get("buyer"),
-        channel=channel,
-        timestamp=timestamp,
-        publication_format=data.get("publication_format"),
-        manager_percent=data.get("manager_percent"),
-        payment_status=data.get("payment_status"),
-        publication_cost=publication_cost
-    )
+    new_sale = __write_sale_to_db(user=user, channel=channel, state_data=data)
 
-    await __finish_creation(bot=message.bot, user_id=message.from_user.id, created_sale=new_purchase)
+    # Finish sale creation
+    await __finish_sale_creation(bot=message.bot, user_id=message.from_user.id, created_sale=new_sale)
 
     if user.telegram_id != channel.creator.telegram_id:
         await message.bot.send_message(
             chat_id=channel.creator.telegram_id,
-            text=UserMessages.get_purchase_notification_for_owner(user, new_purchase)
+            text=UserMessages.get_purchase_notification_for_owner(user, new_sale)
         )
+    __setup_sale_payment_reminder(sale=new_sale)
+
+
+def __write_sale_to_db(user: User, channel: Channel, state_data: dict):
+    """ Saves created sale to the database """
+    timestamp = datetime.datetime.combine(state_data.get("date"), state_data.get("time"))
+    new_purchase = sales.create_sale(
+        user=user,
+        buyer=state_data.get("buyer"),
+        channel=channel,
+        timestamp=timestamp,
+        publication_format=state_data.get("publication_format"),
+        manager_percent=state_data.get("manager_percent"),
+        payment_status=state_data.get("payment_status"),
+        publication_cost=state_data.get("publication_cost")
+    )
+    return new_purchase
+
+
+async def __finish_sale_creation(user_id: int, bot: Bot, created_sale: Sale):
+    manager_profit = created_sale.publication_cost * (created_sale.manager_percent / 100)
+
+    await bot.send_message(
+        chat_id=user_id,
+        text=f"<b>📄 Отчет TeleУчетка</b> \n\n"
+        f"Запланировано рекламное место на {created_sale.get_date_str()} {created_sale.get_time_str()} \n"
+        f"Стоимость рекламного места: {created_sale.publication_cost}₽ \n\n"
+        f"<tg-spoiler>Процент менеджеру: {created_sale.manager_percent}% <b>({manager_profit:.2f}₽)</b></tg-spoiler>",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    msg = await bot.send_animation(
+        chat_id=user_id,
+        animation=UserMessages.get_loading_animation(), caption='Загрузка таблицы...'
+    )
+
+    table_url = await __write_sale_to_google_table(sale=created_sale)
+
+    month_profit = sales.get_purchases_sum_for_month(
+        year=created_sale.timestamp.year, month=created_sale.timestamp.month, channel=created_sale.channel
+    )
+    manager_month_profit = sales.get_manager_sum_for_month(
+        year=created_sale.timestamp.year, month=created_sale.timestamp.month, channel=created_sale.channel
+    )
+    text = (
+        f'<b>Общий итог продаж за {UserMessages.get_month_name(month_num=created_sale.timestamp.month)}</b> \n\n'
+        f'Доход: {month_profit:.2f} ₽ \n'
+        f'Доход менеджера за месяц: {manager_month_profit:.2f} ₽'
+    )
+    await msg.delete()
+    await bot.send_message(chat_id=user_id, text=text, reply_markup=UserKeyboards.get_table(table_url=table_url))
+    await bot.send_message(chat_id=user_id, text=UserMessages.get_main_menu(), reply_markup=UserKeyboards.get_main_menu())
+
+
+def __setup_sale_payment_reminder(sale: Sale):
+    if sale.payment_status in (SalePaymentStatusEnum.BY_SPM.value, SalePaymentStatusEnum.BOOKED.value):
+        if sale.payment_status == SalePaymentStatusEnum.BY_SPM.value:
+            reminder_time = sale.timestamp + datetime.timedelta(hours=23, minutes=58)
+        else:
+            reminder_time = sale.timestamp - datetime.timedelta(hours=24)
+
+        # Skip if reminder outdated
+        if datetime.datetime.now() > reminder_time:
+            return
+        else:
+            create_sale_payment_reminder(sale_id=sale.id, reminder_time=reminder_time)
+
+
+async def __write_sale_to_google_table(sale: Sale) -> str:
+    # Занесение данных в таблицу
+    table_name = __get_table_name(channel_name=sale.channel.title)
+
+    if not sale.channel.table_id:
+        table_id = await GoogleSheetsAPI.create_table(table_name=table_name, title_data=get_table_title())
+        sale.channel.table_id = table_id
+        sale.channel.save()
+
+    data = [
+        sale.get_date_str(), sale.get_time_str(),
+        sale.buyer, sale.publication_cost,
+        sale.manager_percent, sale.publication_format,
+        sale.payment_status
+    ]
+    record_number = sales.get_sales_count_in_channel(channel=sale.channel)
+    table_url = await GoogleSheetsAPI.insert_row_data(
+        table_id=sale.channel.table_id, data=data, position=record_number
+    )
+
+    return table_url
 
 
 def register_purchases_handlers(router: Router):

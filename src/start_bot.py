@@ -1,7 +1,12 @@
+import asyncio
+
+from aiocron import crontab
+
 from src import bot, dp
 from src.handlers import register_all_handlers
 from src.database.models import register_models
 from src.utils import logger, GoogleSheetsAPI
+from src.utils.sales_reminders import send_sale_reminder
 
 
 async def on_startup():
@@ -13,6 +18,9 @@ async def on_startup():
 
     # Авторизация в Google Sheets
     await GoogleSheetsAPI.make_auth()
+
+    cron = crontab('*/1 * * * *', func=send_sale_reminder, start=False)
+    cron.start()
 
     logger.info('Бот запущен!')
 
