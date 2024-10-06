@@ -6,7 +6,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardMarkup, 
 
 from src.database.models import Channel, Sale
 from src.misc.callbacks_data import ChannelCallback, NavigationCallback, CalendarNavigationCallback, DateCallback, \
-    PublicationFormatCallback, SaleCallback, EditSaleCallback
+    SaleCallback, EditSaleCallback
+from src.misc.enums import SalePaymentStatusEnum
 from src.utils import GoogleSheetsAPI
 
 
@@ -209,6 +210,18 @@ class UserKeyboards:
         return builder.as_markup(input_field_placeholder='Выберите или введите формат')
 
     @staticmethod
+    def get_payment_statuses() -> ReplyKeyboardMarkup:
+        cancel_builder = ReplyKeyboardBuilder()
+        cancel_builder.button(text='❌ Отменить')
+
+        builder = ReplyKeyboardBuilder()
+        for status in SalePaymentStatusEnum:
+            builder.button(text=status.value)
+
+        builder.adjust(2).attach(cancel_builder)
+        return builder.as_markup(input_field_placeholder='Выберите статус оплаты:', resize_keyboard=True)
+
+    @staticmethod
     def get_day_sales(sales: list[Sale]) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
@@ -236,6 +249,7 @@ class UserKeyboards:
         builder.button(text='Изменить % менеджеру', callback_data=EditSaleCallback(sale_id=sale.id, option='manager_percent'))
         builder.button(text='Изменить цену места', callback_data=EditSaleCallback(sale_id=sale.id, option='cost'))
         builder.button(text='Изменить формат', callback_data=EditSaleCallback(sale_id=sale.id, option='format'))
+        builder.button(text='Изменить статус', callback_data=EditSaleCallback(sale_id=sale.id, option='payment_status'))
         builder.button(text='Изменить покупателя', callback_data=EditSaleCallback(sale_id=sale.id, option='buyer'))
         if has_rights_on_delete:
             builder.button(text='❌ Удалить', callback_data=EditSaleCallback(sale_id=sale.id, option='delete'))

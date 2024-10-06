@@ -1,3 +1,4 @@
+from datetime import datetime
 from peewee import (
     Model, PostgresqlDatabase, SqliteDatabase, AutoField,
     SmallIntegerField, BigIntegerField, IntegerField,
@@ -69,9 +70,10 @@ class Sale(_BaseModel):
     buyer = CharField(max_length=500)
     publication_cost = DecimalField(max_digits=15, decimal_places=2)
     manager_percent = DecimalField(max_digits=5, decimal_places=2)
-    publication_format = CharField(max_length=50)
+    payment_status = CharField(max_length=50)
 
-    timestamp = DateTimeField()
+    publication_format = CharField(max_length=50)
+    timestamp = DateTimeField(default=datetime.utcnow)
 
 
 class Admin(_BaseModel):

@@ -15,20 +15,23 @@ from src.messages.user import UserMessages
 from src.keyboards.user import UserKeyboards
 from src.misc.callbacks_data import NavigationCallback, DateCallback, ChannelCallback, CalendarNavigationCallback, \
     SaleCallback, EditSaleCallback
+from src.misc.enums import SalePaymentStatusEnum
 from src.utils import GoogleSheetsAPI
 
 
 class SaleEditingStates(StatesGroup):
     enter_new_cost = State()
     enter_new_manager_percent = State()
+    enter_new_payment_status = State()
     enter_new_format = State()
     enter_new_buyer = State()
 
     @classmethod
-    def get_state(cls, option: Literal['cost', 'buyer', 'manager_percent', 'format']):
+    def get_state(cls, option: Literal['cost', 'buyer', 'manager_percent', 'format', 'payment_status']):
         match option:
             case 'cost': return cls.enter_new_cost
             case 'manager_percent': return cls.enter_new_manager_percent
+            case 'payment_status': return cls.enter_new_payment_status
             case 'buyer': return cls.enter_new_buyer
             case 'format': return cls.enter_new_format
 
@@ -111,12 +114,14 @@ async def handle_show_sale_callback(callback: CallbackQuery, callback_data: Sale
 
 
 async def __show_sale(bot: Bot, user_id: int, sale: Sale, edit_msg_id: int = None):
+    payment_status = sale.payment_status or "?"
     text = (
-        f'Менеджер: {sale.writer} \n'
-        f'Процент менеджеру: {sale.manager_percent}% \n'
-        f'Цена рекламного места: {sale.publication_cost:.2f} ₽ \n'
-        f'Формат: {sale.publication_format} \n'
-        f'Покупатель: {sale.buyer}'
+        f"Менеджер: {sale.writer} \n"
+        f"Процент менеджеру: {sale.manager_percent}% \n"
+        f"Цена рекламного места: {sale.publication_cost:.2f} ₽ \n"
+        f"Формат: {sale.publication_format} \n"
+        f"Статус оплаты: {payment_status} \n"
+        f"Покупатель: {sale.buyer}"
     )
     has_rights_on_delete = sale.channel.creator.telegram_id == user_id or sale.writer.telegram_id == user_id
     markup = UserKeyboards.get_sale_editing(sale=sale, has_rights_on_delete=has_rights_on_delete)
@@ -136,8 +141,9 @@ async def handle_delete_sale_callback(callback: CallbackQuery, callback_data: Ed
         await callback.answer(UserMessages.get_not_enough_rights())
         return
 
+    await callback.answer(text="🗑 Продажа удалена")
+
     sale_number = sales.get_record_number_in_channel(sale=sale)
-    print(sale_number)
     sales.delete_sale(sale_id=callback_data.sale_id)
     callback_data = DateCallback(date=sale.timestamp.date(), channel_id=sale.channel.id)
     await handle_show_day_purchases_callback(callback, callback_data)
@@ -150,47 +156,53 @@ async def handle_edit_sale_callback(callback: CallbackQuery, callback_data: Edit
     await state.set_state(SaleEditingStates.get_state(callback_data.option))
     await callback.message.edit_reply_markup(reply_markup=None)
 
-    text, markup, col_number = None, None, None
+    text, markup, col_number = None, UserKeyboards.get_cancel_reply(), None
     match callback_data.option:
-        case 'buyer':
-            text = 'Введите нового продавца:'
+        case "buyer":
+            text = "Введите нового продавца:"
             col_number = 3
-            markup = UserKeyboards.get_cancel_reply()
-        case 'cost':
-            text = 'Введите новую цену:'
+        case "cost":
+            text = "Введите новую цену:"
             col_number = 4
-            markup = UserKeyboards.get_cancel_reply()
-        case 'manager_percent':
-            text = 'Введите новый процент менеджеру:'
+        case "manager_percent":
+            text = "Введите новый процент менеджеру:"
             col_number = 5
-            markup = UserKeyboards.get_cancel_reply()
-        case 'format':
-            text = 'Выберите новый формат:'
+        case "format":
+            text = "Выберите новый формат:"
             markup = UserKeyboards.get_publication_formats()
             col_number = 6
+        case "payment_status":
+            text = "Выберите статус оплаты:"
+            markup = UserKeyboards.get_payment_statuses()
+            col_number = 7
 
     await state.update_data(col_number=col_number)
     await callback.message.answer(text=text, reply_markup=markup)
 
 
-async def handle_new_sale_data_message(message: Message, state: FSMContext):
+async def handle_sale_new_data_message(message: Message, state: FSMContext):
     data = await state.get_data()
-    sale = sales.get_sale_by_id(sale_id=data.get('sale_id'))
+    sale = sales.get_sale_by_id(sale_id=data.get("sale_id"))
 
-    if data.get('option') in ['cost', 'manager_percent']:
+    if data.get("option") in ("cost", "manager_percent"):
         try:
             float(message.text)
         except ValueError:
-            await message.answer(text='Введите число:')
+            await message.answer(text="Введите число:")
             return
+    # if data.get("option") == "payment_status":
+    #     if message.text not in tuple(SalePaymentStatusEnum):
+    #         await message.answer(text=UserMessages.get_unknown_command())
+    #         return
 
     await state.clear()
 
-    match data.get('option'):
-        case 'cost': sale.publication_cost = float(message.text)
-        case 'buyer': sale.buyer = message.text
-        case 'format': sale.publication_format = message.text
-        case 'manager_percent': sale.manager_percent = float(message.text)
+    match data.get("option"):
+        case "cost": sale.publication_cost = float(message.text)
+        case "payment_status": sale.payment_status = message.text
+        case "buyer": sale.buyer = message.text
+        case "format": sale.publication_format = message.text
+        case "manager_percent": sale.manager_percent = float(message.text)
     sale.save()
 
     await message.answer('✅ Изменения сохранены', reply_markup=UserKeyboards.get_main_menu())
@@ -252,4 +264,4 @@ def register_sales_calendar_handlers(router: Router):
     router.callback_query.register(handle_edit_sale_callback, EditSaleCallback.filter())
 
     router.message.register(handle_cancel_editing, StateFilter(SaleEditingStates), F.text.lower().contains('отмен'))
-    router.message.register(handle_new_sale_data_message, StateFilter(SaleEditingStates))
+    router.message.register(handle_sale_new_data_message, StateFilter(SaleEditingStates))

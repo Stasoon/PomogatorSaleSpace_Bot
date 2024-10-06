@@ -5,7 +5,6 @@ from aiogram import Router, F, Bot
 from aiogram.enums import ContentType
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from src.database.models import Sale
@@ -13,31 +12,24 @@ from src.keyboards.user import UserKeyboards
 from src.messages.user import UserMessages
 from src.database.users import get_user_or_none
 from src.database import channels, sales
-from src.misc.callbacks_data import ChannelCallback, DateCallback, CalendarNavigationCallback, PublicationFormatCallback
+from src.misc.callbacks_data import ChannelCallback, DateCallback, CalendarNavigationCallback
+from src.misc.enums import SalePaymentStatusEnum
+from src.misc.states.user import PurchaseAddingStates
 from src.utils import GoogleSheetsAPI
 
 
 # region Utils
 
-class PurchaseAddingStates(StatesGroup):
-    select_channel = State()
-    select_date = State()
-    select_time = State()
-    enter_buyer = State()
-    enter_publication_format = State()
-    enter_publication_cost = State()
-    enter_manager_percent = State()
-
 
 def __get_table_name(channel_name: str) -> str:
-    return f'Продажи {channel_name}'
+    return f"Продажи {channel_name}"
 
 
 def get_table_title() -> list[str]:
     return [
-        'Дата', 'Время', 'Покупатель',
-        'Стоимость', 'Процент менеджеру',
-        'Формат публикации'
+        "Дата", "Время", "Покупатель",
+        "Стоимость", "Процент менеджеру",
+        "Формат публикации", "Статус оплаты"
     ]
 
 # endregion
@@ -54,9 +46,9 @@ async def handle_create_purchase_callback(message: Message, state: FSMContext):
     markup = UserKeyboards.get_channels_to_create_purchase(user_channels)
 
     if len(user_channels) == 0:
-        text = '🪬Введите название канала:'
+        text = "🪬Введите название канала:"
     else:
-        text = '🪬Выберите канал из списка или напишите название для добавления нового канала:'
+        text = "🪬Выберите канал из списка или напишите название для добавления нового канала:"
 
     await message.answer(text=text, reply_markup=markup)
     await state.set_state(PurchaseAddingStates.select_channel)
@@ -64,7 +56,7 @@ async def handle_create_purchase_callback(message: Message, state: FSMContext):
 
 async def handle_cancel_creating_message(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(text='Создание продажи отменено', reply_markup=ReplyKeyboardRemove())
+    await message.answer(text="Создание продажи отменено", reply_markup=ReplyKeyboardRemove())
     await message.answer(text=UserMessages.get_main_menu(), reply_markup=UserKeyboards.get_main_menu())
 
 
@@ -103,8 +95,10 @@ async def handle_date_callback(callback: CallbackQuery, callback_data: DateCallb
     await state.update_data(date=callback_data.date)
 
     markup = UserKeyboards.get_select_time()
-    await callback.message.edit_text(text=f"⏰ Дата публикации: {callback_data.date.strftime('%d.%m.%Y')}")
-    msg = await callback.message.answer(text='⌛ Время публикации:', reply_markup=markup)
+    publication_date = callback_data.date.strftime('%d.%m.%Y')
+
+    await callback.message.edit_text(text=f"⏰ Дата публикации: {publication_date}")
+    msg = await callback.message.answer(text="⌛ Время публикации:", reply_markup=markup)
     await state.update_data(previous_message_id=msg.message_id)
     await state.set_state(PurchaseAddingStates.select_time)
 
@@ -112,29 +106,29 @@ async def handle_date_callback(callback: CallbackQuery, callback_data: DateCallb
 async def __process_time(user_id: int, bot: Bot, state: FSMContext, hour: int, minute: int):
     await bot.send_message(
         chat_id=user_id,
-        text=f'⌛ Время публикации: {hour:02}:{minute:02}',
+        text=f"⌛ Время публикации: {hour:02}:{minute:02}",
         reply_markup=UserKeyboards.get_cancel_reply()
     )
-    previous_message_id = (await state.get_data()).get('previous_message_id')
+    previous_message_id = (await state.get_data()).get("previous_message_id")
     await bot.delete_message(chat_id=user_id, message_id=previous_message_id)
 
     await state.update_data(time=datetime.time(hour=hour, minute=minute))
     await state.set_state(PurchaseAddingStates.enter_buyer)
-    await bot.send_message(chat_id=user_id, text='👤 Напишите @username или имя покупателя:')
+    await bot.send_message(chat_id=user_id, text="👤 Напишите @username или имя покупателя:")
 
 
 async def handle_selected_time_web_app_data(message: Message, state: FSMContext):
     await message.delete()
 
     data = json.loads(message.web_app_data.data)
-    hour, minute = data.get('hours'), data.get('minutes')
+    hour, minute = data.get("hours"), data.get("minutes")
 
     await __process_time(user_id=message.from_user.id, bot=message.bot, state=state, hour=hour, minute=minute)
 
 
 async def handle_time_message(message: Message, state: FSMContext):
-    a = message.text.split(':')
-    input_error_text = 'Введите время в формате Часы:Минуты или воспользуйтесь клавиатурой!'
+    a = message.text.split(":")
+    input_error_text = "Введите время в формате Часы:Минуты или воспользуйтесь клавиатурой!"
     if len(a) != 2:
         await message.answer(text=input_error_text)
         return
@@ -156,32 +150,32 @@ async def handle_buyer_title_message(message: Message, state: FSMContext):
     await state.update_data(buyer=message.text)
 
     await state.set_state(PurchaseAddingStates.enter_publication_format)
-    await message.answer('🗑 Выберите формат публикации:', reply_markup=UserKeyboards.get_publication_formats())
+    await message.answer("🗑 Выберите формат публикации:", reply_markup=UserKeyboards.get_publication_formats())
 
 
 async def handle_publication_format_message(message: Message, state: FSMContext):
     await state.update_data(publication_format=message.text)
 
     await state.set_state(PurchaseAddingStates.enter_publication_cost)
-    await message.answer('💰Напишите цену рекламного места:', reply_markup=UserKeyboards.get_cancel_reply())
+    await message.answer("💰Напишите цену рекламного места:", reply_markup=UserKeyboards.get_cancel_reply())
 
 
 async def handle_publication_cost_message(message: Message, state: FSMContext):
     try:
         cost = round(float(message.text), 2)
     except ValueError:
-        await message.answer('Это не число! Введите стоимость публикации:')
+        await message.answer("Это не число! Введите стоимость публикации:")
         return
 
     await state.update_data(publication_cost=cost)
 
-    await message.answer(text=f'💰 Напишите <b>%</b> менеджеру:')
+    await message.answer(text=f"💰 Напишите <b>%</b> менеджеру:")
     await state.set_state(PurchaseAddingStates.enter_manager_percent)
 
 
 async def __finish_creation(user_id: int, bot: Bot, created_sale: Sale):
-    date_str = created_sale.timestamp.strftime('%d.%m.%Y')
-    time_str = created_sale.timestamp.strftime('%H:%M')
+    date_str = created_sale.timestamp.strftime("%d.%m.%Y")
+    time_str = created_sale.timestamp.strftime("%H:%M")
     manager_profit = created_sale.publication_cost * (created_sale.manager_percent / 100)
 
     await bot.send_message(
@@ -207,7 +201,8 @@ async def __finish_creation(user_id: int, bot: Bot, created_sale: Sale):
 
     data = [
         date_str, time_str, created_sale.buyer, created_sale.publication_cost,
-        created_sale.manager_percent, created_sale.publication_format
+        created_sale.manager_percent, created_sale.publication_format,
+        created_sale.payment_status
     ]
     record_number = sales.get_sales_count_in_channel(channel=created_sale.channel)
     table_url = await GoogleSheetsAPI.insert_row_data(
@@ -231,7 +226,7 @@ async def __finish_creation(user_id: int, bot: Bot, created_sale: Sale):
 
 
 async def handle_manager_percent_message(message: Message, state: FSMContext):
-    text = message.text.replace('%', '')
+    text = message.text.replace("%", "")
 
     if text.isdigit():
         manager_percent = int(message.text)
@@ -240,29 +235,45 @@ async def handle_manager_percent_message(message: Message, state: FSMContext):
         except ValueError: manager_percent = None
 
     if manager_percent is None:
-        await message.answer('Это не число! Введите процент менеджера:')
+        await message.answer("Это не число! Введите процент менеджера:")
         return
 
     if manager_percent > 100:
-        await message.answer('Процент не может быть больше 100. Попробуйте ещё раз:')
+        await message.answer("Процент не может быть больше 100. Попробуйте ещё раз:")
         return
 
     await state.update_data(manager_percent=manager_percent)
+    await message.answer(text=f"💳 Выберите статус оплаты:", reply_markup=UserKeyboards.get_payment_statuses())
+    await state.set_state(PurchaseAddingStates.enter_payment_status)
+
+
+async def handle_payment_status(message: Message, state: FSMContext):
+    if message.text not in tuple(SalePaymentStatusEnum):
+        await message.answer(
+            text=UserMessages.get_unknown_command(),
+            reply_markup=UserKeyboards.get_payment_statuses()
+        )
+        return
+    await state.update_data(payment_status=message.text)
 
     data = await state.get_data()
     await state.clear()
 
     # Вывод результатов
-    publication_cost = data.get('publication_cost')
+    publication_cost = data.get("publication_cost")
 
     user = get_user_or_none(telegram_id=message.from_user.id)
-    channel = channels.get_channel_by_id(channel_id=data.get('channel_id'))
-    timestamp = datetime.datetime.combine(data.get('date'), data.get('time'))
+    channel = channels.get_channel_by_id(channel_id=data.get("channel_id"))
+    timestamp = datetime.datetime.combine(data.get("date"), data.get("time"))
     new_purchase = sales.create_sale(
-        user=user, buyer=data.get('buyer'),
-        channel=channel, timestamp=timestamp,
-        publication_format=data.get('publication_format'),
-        manager_percent=manager_percent, publication_cost=publication_cost
+        user=user,
+        buyer=data.get("buyer"),
+        channel=channel,
+        timestamp=timestamp,
+        publication_format=data.get("publication_format"),
+        manager_percent=data.get("manager_percent"),
+        payment_status=data.get("payment_status"),
+        publication_cost=publication_cost
     )
 
     await __finish_creation(bot=message.bot, user_id=message.from_user.id, created_sale=new_purchase)
@@ -329,3 +340,6 @@ def register_purchases_handlers(router: Router):
 
     # Процент менеджеру
     router.message.register(handle_manager_percent_message, PurchaseAddingStates.enter_manager_percent)
+
+    # Статус оплаты
+    router.message.register(handle_payment_status, PurchaseAddingStates.enter_payment_status)

@@ -4,17 +4,19 @@ from datetime import datetime, date
 from peewee import fn
 
 from src.database.models import Sale, Channel, User
+from src.misc.enums import SalePaymentStatusEnum
 
 
 def create_sale(
         user: User, channel: Channel, buyer: str, timestamp: datetime,
-        publication_cost: float, manager_percent: float,
-        publication_format: str, row_in_table: int = None
+        publication_cost: float, manager_percent: float, publication_format: str,
+        payment_status: str = SalePaymentStatusEnum.PAID.value, row_in_table: int = None
 ) -> Sale:
     purchase = Sale.create(
         writer=user, channel=channel, timestamp=timestamp, buyer=buyer,
         publication_cost=publication_cost, manager_percent=manager_percent,
-        publication_format=publication_format, row_in_table=row_in_table
+        publication_format=publication_format, row_in_table=row_in_table,
+        payment_status=payment_status
     )
     return purchase
 
