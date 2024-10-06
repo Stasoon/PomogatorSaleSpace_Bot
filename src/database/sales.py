@@ -122,7 +122,8 @@ def get_sales_in_channel(channel: Channel):
     return Sale.select().where(Sale.channel == channel)
 
 
-def get_record_number_in_channel(sale):
+def get_record_number_in_channel(sale: Sale):
+    """ Возвращает номер продажи в канале по счёту """
     query = Sale.select(Sale.id).where(Sale.channel == sale.channel).order_by(Sale.id)
     record_number = query.where(Sale.id < sale.id).count()
     return record_number + 1

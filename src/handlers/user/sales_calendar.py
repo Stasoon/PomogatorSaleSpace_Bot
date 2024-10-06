@@ -152,13 +152,13 @@ async def handle_edit_sale_callback(callback: CallbackQuery, callback_data: Edit
 
     text, markup, col_number = None, None, None
     match callback_data.option:
-        case 'cost':
-            text = 'Введите новую цену:'
-            col_number = 4
-            markup = UserKeyboards.get_cancel_reply()
         case 'buyer':
             text = 'Введите нового продавца:'
             col_number = 3
+            markup = UserKeyboards.get_cancel_reply()
+        case 'cost':
+            text = 'Введите новую цену:'
+            col_number = 4
             markup = UserKeyboards.get_cancel_reply()
         case 'manager_percent':
             text = 'Введите новый процент менеджеру:'
@@ -178,7 +178,8 @@ async def handle_new_sale_data_message(message: Message, state: FSMContext):
     sale = sales.get_sale_by_id(sale_id=data.get('sale_id'))
 
     if data.get('option') in ['cost', 'manager_percent']:
-        try: float(message.text)
+        try:
+            float(message.text)
         except ValueError:
             await message.answer(text='Введите число:')
             return
@@ -194,8 +195,13 @@ async def handle_new_sale_data_message(message: Message, state: FSMContext):
 
     await message.answer('✅ Изменения сохранены', reply_markup=UserKeyboards.get_main_menu())
     await __show_sale(bot=message.bot, user_id=message.from_user.id, sale=sale)
+
+    sale_number_in_channel = sales.get_record_number_in_channel(sale=sale)
+    sale_row_number = sale_number_in_channel + 1  # +1 из-за шапки таблицы
     await GoogleSheetsAPI.edit_cell(
-        table_id=sale.channel.table_id, data=message.text, xy=(sale.id+1, data.get('col_number'))
+        table_id=sale.channel.table_id,
+        data=message.text,
+        xy=(sale_row_number, data.get('col_number'))
     )
 
 

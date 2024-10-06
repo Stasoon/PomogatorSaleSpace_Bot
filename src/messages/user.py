@@ -28,8 +28,7 @@ class UserMessages:
             f'Для начала советую подписаться: \n\n'
             
             '1. <a href="https://t.me/telegagroups">Блог Telegramщики</a> \n'
-            '2. <a href="https://t.me/Castpub">Биржа</a> \n'
-            '3. <a href="https://t.me/school_content_tg">Школа контента</a> \n\n'
+            '2. <a href="https://t.me/+SJ5iV_8cNGtkYTNi">Чат для админов</a> \n\n'
             
             '<b>А теперь вводи нужную информацию 🔍</b>'
         )
