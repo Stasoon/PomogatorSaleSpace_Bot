@@ -73,7 +73,7 @@ class Sale(_BaseModel):
     payment_status = CharField(max_length=50)
 
     publication_format = CharField(max_length=50)
-    timestamp = DateTimeField(default=datetime.now)
+    timestamp = DateTimeField(default=datetime.utcnow)
 
     def get_date_str(self) -> str:
         return self.timestamp.strftime("%d.%m.%Y")

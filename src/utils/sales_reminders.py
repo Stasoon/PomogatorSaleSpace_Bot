@@ -7,24 +7,30 @@ from src.create_bot import bot
 from src.database.models import SalePaymentsReminder
 from src.keyboards.user import UserKeyboards
 from src.misc.enums import SalePaymentStatusEnum
+from src.utils.get_now_time_moscow import get_now_time_moscow
 
 
 async def send_sale_reminder():
+    moscow_now = get_now_time_moscow()
     reminders = (
         SalePaymentsReminder.select()
         .where(
-            SalePaymentsReminder.reminder_time >= datetime.now() - timedelta(seconds=40),
-            SalePaymentsReminder.reminder_time <= datetime.now() + timedelta(seconds=40)
+            SalePaymentsReminder.reminder_time >= moscow_now - timedelta(seconds=40),
+            SalePaymentsReminder.reminder_time <= moscow_now + timedelta(seconds=40)
         )
     )
 
     completed_reminders_ids = []
     for reminder in reminders:
         sale = reminder.sale
-        if sale.payment_status == SalePaymentStatusEnum.BY_SPM.value:
-            reminder_text = "Напоминаем, что проходят 24 часа. Посчитайте стоимость."
-        else:
-            reminder_text = "Бронь не оплатили"
+
+        match sale.payment_status:
+            case SalePaymentStatusEnum.BY_SPM.value:
+                reminder_text = "Напоминаем, что проходят 24 часа. Посчитайте стоимость."
+            case SalePaymentStatusEnum.BOOKED.value:
+                reminder_text = "Бронь не оплатили"
+            case _:
+                continue
         markup = UserKeyboards.get_open_sale(sale=sale)
 
         try:

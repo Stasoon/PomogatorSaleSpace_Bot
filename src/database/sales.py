@@ -5,6 +5,7 @@ from peewee import fn
 
 from src.database.models import Sale, Channel, User
 from src.misc.enums import SalePaymentStatusEnum
+from src.utils.get_now_time_moscow import get_now_time_moscow
 
 
 def create_sale(
@@ -12,13 +13,13 @@ def create_sale(
         publication_cost: float, manager_percent: float, publication_format: str,
         payment_status: str = SalePaymentStatusEnum.PAID.value, row_in_table: int = None
 ) -> Sale:
-    purchase = Sale.create(
+    sale = Sale.create(
         writer=user, channel=channel, timestamp=timestamp, buyer=buyer,
         publication_cost=publication_cost, manager_percent=manager_percent,
         publication_format=publication_format, row_in_table=row_in_table,
         payment_status=payment_status
     )
-    return purchase
+    return sale
 
 
 def get_sale_by_id(sale_id: int) -> Sale | None:

@@ -284,7 +284,7 @@ def __setup_sale_payment_reminder(sale: Sale):
             reminder_time = sale.timestamp - datetime.timedelta(hours=24)
 
         # Skip if reminder outdated
-        if datetime.datetime.now() > reminder_time:
+        if datetime.datetime.utcnow() > reminder_time:
             return
         else:
             create_sale_payment_reminder(sale_id=sale.id, reminder_time=reminder_time)

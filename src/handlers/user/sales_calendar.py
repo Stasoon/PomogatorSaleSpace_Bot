@@ -15,7 +15,6 @@ from src.messages.user import UserMessages
 from src.keyboards.user import UserKeyboards
 from src.misc.callbacks_data import NavigationCallback, DateCallback, ChannelCallback, CalendarNavigationCallback, \
     SaleCallback, EditSaleCallback
-from src.misc.enums import SalePaymentStatusEnum
 from src.utils import GoogleSheetsAPI
 
 
